@@ -1,0 +1,290 @@
+<!--
+<nav style="z-index: 1050;">
+    <label>
+        <input type="checkbox">
+        <header>
+            <a><img src="favicon-32x32.png">{{selectedModule && setings?setings[selectedModule].label:'PanLite'}}</a>
+        </header>
+        
+        <ul>
+            <li on-click="@this.set('selectedModule',null)"><a><i class="glyphicon glyphicon-home"></i> Home</a></li>
+            <li on-click="@this.set('selectedModule','settings')"><a><i class="glyphicon glyphicon-user"></i> User</a></li>
+            <li on-click="export2PDF"><a title="Export to PDF"><i class="glyphicon glyphicon-print"></i> PDF</a></li>
+        </ul>
+    </label>
+</nav>
+-->
+
+{{#if selectedModule && selectedModule != 'settings' && selectedModule != 'dospece' && selectedModule != 'NarucivanjeSAVE'}}
+<Grid G={{.}} selectedModule={{selectedModule}} rows={{rows[selectedModule]}} ts={{ts[selectedModule]}} columns={{setings[selectedModule].columns}} params={{nextSelectedModuleParams}}></Grid>
+{{/if}}
+
+{{#if selectedModule && selectedModule == 'dospece'}}
+<dospece G={{.}} selectedModule={{selectedModule}} ts={{ts[selectedModule]}} > </dospece>
+{{/if}}
+
+{{#if selectedModule == 'settings'}}
+<!-- <settings G={{.}}></settings> -->
+<Login G={{.}} ></Login>
+{{/if}}
+
+
+<dospece G={{.}} selectedModule={{selectedModule}}></dospece>
+<!--
+<div style="flex: 1;display: flex;flex-flow: column;overflow: auto; display: {{selectedModule?'none':'flex'}};">
+  {{#each setings:key}}
+    {{#if .show_in_menu}}
+    <button primary m-full on-click="@this.fire('onModuleSelect',@this.event,key)" 
+      style="height:100%;font-size: 2.2rem;line-height: 3rem;margin-top:1rem; min-height: 10rem; max-height: 5em;">{{.label || key}}
+    </button>
+    {{/if}}
+  {{/each}}
+</div>                       
+-->
+
+
+<!--
+{{#if !is_logedin}}
+<modal show="{{true}}" title="Login" showOverlay="{{true}}" showHeader="{{true}}" 
+  style="height: 30em; width: 30em; left: calc(50% - 15em); right: inherit; top: calc(50% - 15em); bottom: inherit;" >
+  <Login G={{.}} ></Login>
+</modal>
+{{/if}}
+-->
+<script>
+  component.exports = {
+    onrender: async function () {
+        var self = this;
+
+        var company_id = await db.getItem('company_id');
+        var username = await db.getItem('username');
+        var userpass = await db.getItem('userpass');
+//        self.set('is_logedin' , !!(company_id && username && userpass) )
+        if (!company_id || !username || !userpass) self.set('selectedModule','settings')
+
+        this.on('onModuleSelect', function(e,m, params=null){
+            console.log('onModuleSelect', e, m, params);
+            if (e && e.original) e.original.preventDefault();
+            if (e && e.original) e.original.stopPropagation();
+            self.set('selectedModule',m);
+            if ( params)  self.set('nextSelectedModuleParams', params)
+            if (!params) socket.emit('get_rows', m); else socket.emit('get_rows', m, params);
+            return false
+        })
+
+        this.on('export2CSV', function(){
+          if (!table4Export.length) return;
+          var tn = table4Export[table4Export.length-1];
+          if (!tn) return;
+//          var o = this.get('rows.'+ tn);
+          var o = tn.get('fr') || [];
+          var selectedModule = tn.get('selectedModule') || 'noname';
+          var csv = Papa.unparse(o,{quotes:true, delimiter:';'});
+          var blob = new Blob( [ csv ] );
+          FileSaver.saveAs(blob, selectedModule+'.csv');
+          //console.log(csv)
+        })
+
+        function replaceTemplate (template, tn){
+          var rr = Ractive.extend({template:template, preserveWhitespace:true})
+          var ro = new rr({data:tn.get()});
+          return ro.toHTML();
+
+        }
+
+        this.on('export2PDF', function(){
+          if (!table4Export.length) return;
+          var tn = table4Export[table4Export.length-1];
+          if (!tn) return;
+          var fr = tn.get('fr') || [];
+          //var columns = tn.get('columns') || [];
+          var selectedModule = tn.get('selectedModule') || 'noname';
+          var columns = [].concat( self.get('setings.'+selectedModule+'.columns') || []);
+          var pageOrientation = (self.get('setings.'+selectedModule+'.is_landscape'))?'landscape':'portrait';
+          var title = self.get('setings.'+selectedModule+'.label') || selectedModule;
+
+          var headerPdfStr = self.get('setings.'+selectedModule+'.headerPdf');
+          var headerPdf = null;
+  
+          if (headerPdfStr) {
+            var headerPdfReplaced = replaceTemplate(headerPdfStr, tn);
+            try { headerPdf = JSON5.parse(headerPdfReplaced);
+              } catch (e) { console.log('bad JSON', headerPdfReplaced) }
+          }
+          console.log('headerPdfReplaced', headerPdf);
+
+          var cols = [];
+          columns.splice(0, 0, { compType:'number', visible_pdf:true, label:'#', compId:'RB', w:'5rem'})
+          var row1 = [];
+          //row1.push( {text:'#', alignment:'right', style: 'tableHeader'} );
+
+          var widths = [];// ['auto', 'auto', 'auto', 'auto'],
+          //widths.push('auto');
+
+          for (var c=0; c < columns.length; c++){
+            if (columns[c].visible_pdf){
+              columns[c].alignment = 'left';
+              columns[c].format = function(text){return text};
+              if (columns[c].compType =='number') {
+                columns[c].format = function(text){ return accounting.formatNumber(text, 2, '\u00a0')}; //00a0=nbsp
+                columns[c].alignment = 'right';
+              }
+              cols.push( columns[c] );
+              row1.push( {text:columns[c].label, alignment:columns[c].alignment, style: 'tableHeader', fillColor: '#eee'} )
+              
+              var w = '*';
+              if (columns[c].w){
+                w = 'auto';
+              }
+              widths.push(w);
+
+            }
+          }
+
+          var totals = [];
+          for (var c=0; c < cols.length; c++){
+//            totals.push( {text:cols[c].format(text), alignment:cols[c].alignment} );
+            totals.push( cols[c].aggregate? 0 : null );
+          }
+
+
+
+/*
+compId: "id"
+compType: "text"
+filter: true
+label: "ID"
+template: ""
+visible: true
+aggregate:false
+*/
+          var res = [];
+          res.push(row1);
+          for (var i=0; i< fr.length; i++){
+            var r=[];
+            for (var c=0; c < cols.length; c++){
+              if (c==0) {
+                r.push( {text:''+(i+1)+'.', alignment:'right', style: 'tableHeader'} );
+                continue;
+              }
+              var text = fr[i][ cols[c].compId ];
+              r.push( {text:cols[c].format(text), alignment:cols[c].alignment, style: 'tableHeader'} );              
+              if (cols[c].aggregate) totals[c] += text;
+            }
+            res.push(r)
+          }
+          //console.log('widths', widths)
+          //console.log('res', res)
+          //console.log(totals)
+
+          //format sums
+          var r=[];
+          var empty_row=[];
+          var first_notnull=cols.length;
+          for (var c=0; c < cols.length; c++)
+            if (totals[c]!==null) {first_notnull=c; break}
+
+          //empty_row.push({});
+//          r.push({});
+          for (var c=0; c < cols.length; c++){
+            empty_row.push( (c==0?{text:'',colSpan: cols.length}:{text:''}))
+            r.push( {
+              text:(totals[c]===null?(c==0?'Total  ':''):accounting.formatNumber(totals[c], 2, '\u00a0'))
+              , alignment:(c==0?'right':cols[c].alignment)
+              , colSpan: (c==0?first_notnull:1)
+              , style: 'tableHeader'
+            } );              
+          }
+          res.push(empty_row);
+          res.push(r);
+          res.push(empty_row);
+          //console.log(JSON.stringify(res, null, 2))
+          
+
+          var docDefinition = {}
+          if (headerPdf && !Array.isArray(headerPdf) ){
+            docDefinition = headerPdf;
+            docDefinition.footer = function(currentPage, pageCount) { return { text:currentPage.toString() + ' / ' + pageCount, alignment: 'center'} }
+          }
+          else
+          docDefinition = {
+            pageOrientation: pageOrientation,
+            info: {
+              title: title,
+              author: 'igor',
+              subject: 'subject of document',
+              keywords: 'keywords for document',
+            },
+            footer: function(currentPage, pageCount) { return { text:currentPage.toString() + ' / ' + pageCount, alignment: 'center'} },
+//            content: headerPdf,
+
+            content: (headerPdf || [{text:title+'\n\n', bold:true, alignment: "center", fontSize:14}]).concat([
+            //{text: title, style: 'header', alignment: 'center'},
+              {
+                //style: 'tableHeader',
+                layout: 'lightHorizontalLines',//'headerLineOnly',
+                table: {
+                  headerRows: 1,
+                  //style: 'tableHeader',
+                  widths: widths,
+				          //widths: ['auto', 'auto', 'auto', 'auto'],
+                  body: res
+                }
+              }
+            ]),
+            
+            styles: {
+              header: {
+                //fontSize: 27, //Petar
+                fontSize: 18,
+                bold: true,
+                margin: [0, 0, 0, 10]
+              },
+
+              tableHeader: {
+                bold: true,
+                fontSize: 10,
+                color: 'black'
+              }
+            },
+            defaultStyle: {
+              // alignment: 'justify'
+              bold: true,
+              fontSize: 8
+            }, 
+            pageSize: 'A4',
+            pageMargins: [ 20, 30, 20, 30 ]
+              
+            }
+
+            console.log( JSON.stringify(docDefinition, null,2) )
+
+          // open the PDF in a new window
+          pdfMake.createPdf(docDefinition).open();
+
+          // download the PDF
+          //pdfMake.createPdf(docDefinition).download('optionalName.pdf');        
+
+        })
+
+        this.observe('QRScannerActive', function(n,o,k,i){
+            if (n) document.body.style.backgroundColor = "rgba(255,255,255,0)"
+            else document.body.style.backgroundColor = "rgba(255,255,255,1)"
+        }, {init:false})
+
+        this.observe('company_id', function(n,o,k,i){
+            if (!n) self.set('selectedModule', 'settings')
+        }, {init:false})
+    },        
+    data:function() {
+            return {    
+                selectedModule:null,   
+                QRScannerActive:false,
+                company_id:'',  
+                is_logedin: true,
+                rows:[]
+
+            }
+        }
+  };
+  </script>

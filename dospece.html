@@ -1,0 +1,119 @@
+<section style="max-width:none !important; flex:1; padding-bottom:0.5rem; padding-top:0; overflow:auto;">
+  
+  <table width="100%">
+    <thead>
+      <tr>
+        <th>Vreme početka radnog dana</th>
+        <th>Vreme završetka radnog dana</th>
+        <th>Tajanje radnog dana (h:m)</th>
+        <th>Trajanje dnevnog radnog vremena (h:m)</th>
+        <th>Trajanje noćnog rada (h:m)</th>
+        <th>Trajanje vremena upravljanja vozilom</th>
+        <th>Trajanje ostalog radnog vremena</th>
+        <th>Trajanje plaćenog odsustva</th>
+        <th>Trajanje referentnog radnog vremena</th>
+        <th>Trajanje vremena odmora</th>
+<!--        <th>DrivingH</th>
+        <th>WorkH</th>-->
+      </tr>
+    </thead>
+    <tbody>
+
+      {{#each r}}
+      <tr>
+        <td>{{#if .PocetakTime}}{{formatDate(.DateTime)}}&nbsp;{{dayOfWeek(.DateTime)}}&nbsp;{{.PocetakTime}}{{/if}}</td>
+        <td>{{#if .KrajTime}}{{formatDate(.DateTime)}}&nbsp;{{dayOfWeek(.DateTime)}}&nbsp;{{.KrajTime}}{{/if}}</td>
+        <td>{{timediff(.PocetakTime, .KrajTime)}}</td>
+        <td>{{int2HM(.DrivingDay + .WorkDay)}}</td>
+        <td>{{int2HM(.DrivingNight + .WorkNight)}}</td>
+        <td>{{int2HM(.Driving)}}</td>
+        <td>{{int2HM(.Work)}}</td>
+        <td>00:00</td>
+        <td>{{int2HM(.Driving + .Work)}}</td>
+        <td>{{int2HM(.Break)}}</td>
+<!--
+        <td>{{.DrivingH}}</td>
+        <td>{{.WorkH}}</td>-->
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>  
+    
+  
+</section>
+<section style="max-width:none !important; padding-bottom:0.5rem; padding-top:0.5rem; display:{{selectedModule == 'dospece'?'':'none'}}">
+    <button primary m-full on-click="@this.getdospece()" style="width: 100%;">Last sync: {{timeago(ts)}}
+        <i style="float:right" class="glyphicon {{dospeceIsLoading?'glyphicon-repeat fast-right-spinner':'glyphicon-refresh'}} "></i>
+    </button>
+</section>
+<style>
+  thead th { 
+    position: sticky; 
+    top: 0;     
+    background-color: white;
+    z-index: 2;
+    }
+  table { 
+    overflow: auto;
+    font-family: monospace;
+    line-height: 1em;
+  }
+    .h{
+        width:8rem; 
+        display: inline-block; 
+        background-color:lightblue;
+        text-align: center;
+        border: solid 1px gray;
+    }
+    .b{
+        font-weight: bold;
+        width:8rem; 
+        display: inline-block; 
+        border: solid 1px gray;
+        text-align: right;
+    }
+</style>
+<script>
+  component.exports = {
+    onrender: function () {
+        var self = this;
+        D = this;
+        this.days = ['Ned','Pon','Uto','Sre','Čet','Pet','Sub']
+
+    },        
+    data:function() {
+            return {
+                G:{rows:[]} ,
+                r:[],  
+                dayOfWeek(datum){ 
+                  var d = new Date(datum);
+                  return this.days[ d.getDay() ]; 
+                 },
+                formatDate(datum){
+                  var d = new Date(datum);
+                  var date = d.getDate();
+                  var month = d.getMonth(); //January is 0, not 1
+                  var year = d.getFullYear();
+                  var dateString = (date<10?'0'+date:date) + "." + ( (month + 1)<10?'0'+(month + 1):(month + 1) )+ "." + year;    
+                  return dateString              
+                },
+                int2HM(i){
+                  var h = i? (i/60) | 0: 0;
+                  var m = i? i%60 : 0;
+                  return '' + (h<10?'0'+h:h) + ':' + (m<10?'0'+m:m)
+                },
+                timediff(time1, time2){
+                  var time1Arr = time1.split(':');
+                  var time1Int = 60*parseInt(time1Arr[0]) + parseInt(time1Arr[1]) ;
+                  var time2Arr = time2.split(':');
+                  var time2Int = 60*parseInt(time2Arr[0]) + parseInt(time2Arr[1]) ;
+                  var time = time2Int - time1Int;
+                  var h = (time / 60)|0;
+                  var m = time % 60;
+                  console.log(time, '->', '' + (h<10?'0'+h:h) + ':' + (m<10?'0'+m:m))
+                  return '' + (h<10?'0'+h:h) + ':' + (m<10?'0'+m:m)
+              }
+            }
+        }
+  };
+  </script>
