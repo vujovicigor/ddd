@@ -13,7 +13,7 @@
     "accounting": "^0.4.1",
     "file-saver": "^2.0.0",
     "fs": "0.0.1-security",
-    "got": "^8.3.2",
+    "got": "^11.8.5",
     "hammerjs": "^2.0.8",
     "izitoast": "^1.4.0",
     "jquery": "^3.3.1",
